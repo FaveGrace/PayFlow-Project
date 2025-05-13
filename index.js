@@ -50,6 +50,10 @@ Endpoints:
 app.post('/auth/register', async (req, res) => {
     const { name, email, password } = req.body;
 
+        if(!name || !email || !password){
+        return res.status(400).json({ message: 'Please fill all fields' });
+        }
+
     try {
         // Check if user already exists
         const existingUser = await User.findOne({ email });
@@ -86,8 +90,8 @@ app.post('/auth/register', async (req, res) => {
                 id: newWallet._id,
                 balance: newWallet.balance
             }
-        }         
-    )}catch(error){
+        })
+    }catch(error){
         res.status(500).json({message: "Internal server error"});
     }
 })
