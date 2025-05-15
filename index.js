@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const {Auth, User, Wallet} = require('./models'); 
+const {generateAccessToken, generateRefreshToken} = require('./utils/token');
 dotenv.config();
 
 const app = express();
@@ -79,6 +80,10 @@ app.post('/auth/register', async (req, res) => {
 
         await newWallet.save()
 
+        // calling the function for generating the access token and refresh token
+        const accessToken = generateAccessToken(newUser._id);
+        const refreshToken = generateRefreshToken(newUser._id);
+
         res.status(201).json({
             message: "User and wallet created successfully",
             newUser: {
@@ -89,8 +94,11 @@ app.post('/auth/register', async (req, res) => {
             newWallet: {
                 id: newWallet._id,
                 balance: newWallet.balance
-            }
+            },
+            accessToken,
+            refreshToken
         })
+    
     }catch(error){
         res.status(500).json({message: "Internal server error"});
     }
@@ -113,27 +121,18 @@ app.post('/auth/login', async (req, res) => {
         }
 
         // Generate JWT token
-        const accessToken = jwt.sign(
-            { id: user?._id },
-             process.env.ACCESS_TOKEN, 
-             { expiresIn: '5m' }
-        );
-
-        const refreshToken = jwt.sign(
-            {id: user?._id},
-            process.env.REFRESH_TOKEN,
-            { expiresIn: '30d' }
-        );
-
+        const accessToken = generateAccessToken(user?._id);
+        const refreshToken = generateRefreshToken(user?._id);
+        
         res.status(200).json({
             message: "Login successful",
-            accessToken,
             user: { 
                 id: user._id,
                 name: user.name, 
                 email: user.email 
             },
             wallet: await Wallet.findOne({ user: user._id }).select('balance'),
+            accessToken,
             refreshToken
         })
 
