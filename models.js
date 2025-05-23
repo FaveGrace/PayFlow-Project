@@ -49,8 +49,39 @@ const walletSchema = new mongoose.Schema({
     }
 });
 
+const transactionSchema = new mongoose.Schema({
+    sender: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    receiver: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    amount: {
+        type: Number,
+        required: true
+    },
+    type: {
+        type: String,
+        enum: ['credit', 'debit'],
+        required: true
+    },
+    description: {
+        type: String,
+        default: ""
+    },
+    date: {
+        type: Date,
+        default: Date.now
+    }
+}, { timestamps: true });
+
 const Auth = new mongoose.model('Auth', authSchema);
 const User = new mongoose.model('User', userSchema);
 const Wallet = new mongoose.model('Wallet', walletSchema);
+const Transaction = new mongoose.model('Transaction', transactionSchema);
 
-module.exports = { Auth, User, Wallet };
+module.exports = { Auth, User, Wallet, Transaction };
