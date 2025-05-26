@@ -1,14 +1,15 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const { registerUser, loginUser } = require('./Controllers/authController');
+const { registerUser, loginUser, handleGetAllUser } = require('./Controllers/authController');
 const { forgotPassword, resetPassword } = require('./Controllers/userController');
 const { transfer, creditOwnWallet, transactionHistory } = require('./Controllers/transactionController');
-const { validateLoginDetails } = require('./middleware/validateRegistration');
+const { validateLoginDetails } = require('./middleware/validateLoginDetails');
 const { validateLogin } = require('./middleware/validateLogin');
 const { validateCreditOwnWallet } = require('./middleware/validateCreditOwnWallet');
 const { validateTransactionHistory } = require('./middleware/validateTransactionHistory');
 const { validateTransfer } = require('./middleware/validateTransfer');
+const { auth } = require('./middleware/authMiddleware');
 dotenv.config();
 
 const app = express();
@@ -59,11 +60,11 @@ Milestone 2: Money Transfers
 
 app.post('/auth/register', validateLoginDetails, registerUser)
 
-app.post('/auth/login',validateLogin, loginUser)
+app.post('/auth/login', validateLogin, loginUser)
 
-app.post("/forgot-password", validateLoginDetails, forgotPassword)
+app.post("/forgot-password", forgotPassword)
 
-app.patch("/reset-password", validateLoginDetails, resetPassword)
+app.patch("/reset-password", auth, resetPassword)
 
 //Money transfer
 app.post("/transfer", validateTransfer, transfer)
@@ -73,3 +74,6 @@ app.post("/wallet/credit-own-wallet", validateCreditOwnWallet, creditOwnWallet)
 
 //Transaction history endpoint
 app.get("/transaction-history/:id", validateTransactionHistory, transactionHistory)
+
+//Get all users by admin if needed
+//app.get("/get-all-users", auth, handleGetAllUser)

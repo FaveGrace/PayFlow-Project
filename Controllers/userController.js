@@ -1,5 +1,6 @@
+const { auth } = require("../middleware/authMiddleware");
 const User = require("../Models/userSchema");
-const {sendForgotPasswordEmail, validEmail} = require('../utils/notifications');
+const {sendEmail, templates} = require('../Service/notifications');
 const bcrypt = require('bcryptjs');
 
 const forgotPassword = async (req, res) => {
@@ -11,21 +12,17 @@ const forgotPassword = async (req, res) => {
             return res.status(400).json({ message: 'Email not found!' });
         }
         // Generate reset token
-        const accessToken = await jwt.sign(
-            { id: user._id }, 
-            process.env.ACCESS_TOKEN, 
-            { expiresIn: '1h' }
-        )        
+        const accessToken = generateAccessToken(newUser._id);      
 
-        await sendForgotPasswordEmail(email, accessToken);
+        await sendEmail(email, "Reset Password", templates.resetPassword(accessToken));
         res.status(200).json({ message: 'Reset password email sent!' });
     }
 
 const resetPassword = async (req, res) => {
-    const {email, password} = req.body;
+    const {email, token, password} = req.body;
         try {
             // Check if user exists
-            const user = await User.findOne({ email });
+            const user = await User.findById({ email: req.user.email });
             if(!user){
                 return res.status(400).json({ message: 'Email not found!' });
             }
@@ -35,9 +32,24 @@ const resetPassword = async (req, res) => {
     
             //Hash password
             const hashedPassword = await bcrypt.hash(password, 12);
-            user.password = hashedPassword;
+            auth.password = hashedPassword;
+            await auth.save();
+
+            user.resetToken = null; // Clear reset token
+            user.resetTokenExpiry = null; //this is to clear the expiry time of the reset token
             await user.save();
-    
+
+            const accessToken = generateAccessToken(user._id); // Generate new access token
+            const refreshToken = generateRefreshToken(user._id); // Generate new refresh token
+
+            auth.accessToken = accessToken;
+            auth.refreshToken = refreshToken;
+            await auth.save();
+
+            // Send confirmation email
+            await sendEmail(email, "Password Reset Confirmation", templates.passwordResetConfirmation(user.fullName));
+            
+            // Respond to client
             res.status(200).json({ message: 'Password reset successfully!' });
         }catch(error){
             res.status(500).json({error})

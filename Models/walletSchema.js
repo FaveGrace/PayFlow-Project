@@ -10,7 +10,7 @@ const walletSchema = new mongoose.Schema({
         type: Number,
         default: 0
     }
-});
+}, { timestamps: true });
 
 const Wallet = new mongoose.model("Wallet", walletSchema);
 

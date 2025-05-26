@@ -23,10 +23,6 @@ const transactionSchema = new mongoose.Schema({
     description: {
         type: String,
         default: ""
-    },
-    date: {
-        type: Date,
-        default: Date.now
     }
 }, { timestamps: true });
 
