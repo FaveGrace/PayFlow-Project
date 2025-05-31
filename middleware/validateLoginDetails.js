@@ -2,7 +2,7 @@
 
 const validateLoginDetails = (req, res, next) => {
 
-    const {name, email, password} = req.body;
+    const {fullName, email, password} = req.body;
 
     const errors = [];
 
@@ -12,11 +12,11 @@ const validateLoginDetails = (req, res, next) => {
     if(!password){
         errors.push("Please add your password.")
     }
-    if(!name){
+    if(!fullName){
         errors.push("Please add your names.")
     }
     if(errors.length > 0){
-        return res.status(400).json({message: errors})
+        return res.status(400).json({errors})
     }
 
     next()

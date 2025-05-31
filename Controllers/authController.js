@@ -1,8 +1,7 @@
-const Auth = require("../Models/authSchema");
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const {generateAccessToken, generateRefreshToken} = require('../Service/token');
-const { sendEmail, templates} = require('../Service/notifications');
+const {generateAccessToken, generateRefreshToken, generateVerificationToken} = require('../Service/token');
+const { sendEmail} = require('../Service/notifications');
 const User = require("../Models/userSchema");
 const Wallet = require("../Models/walletSchema");
 
@@ -10,26 +9,15 @@ const Wallet = require("../Models/walletSchema");
 const registerUser = async (req, res) => {
     const { fullName, email, password } = req.body;
 
-    try {
+    //try {
         // Check if user already exists
-        const existingUser = await Auth.findOne({ email });
+        const existingUser = await User.findOne({ email });
         if(existingUser){
             return res.status(400).json({ message: 'User already exists' });
         }
 
         //Hash password
         const hashedPassword = await bcrypt.hash(password, 12);
-        const verificationToken = crypto.randomBytes(32).toString('hex');
-
-        const newUser = new User({
-            fullName,
-            email,
-            password: hashedPassword,
-            verificationToken,
-            isVerified: false
-        })
-
-        await newUser.save()
 
         const newWallet = new Wallet({
             user: newUser._id,
@@ -38,12 +26,21 @@ const registerUser = async (req, res) => {
 
         await newWallet.save()
 
-        // calling the function for generating the access token and refresh token
-        const accessToken = generateAccessToken(newUser._id);
-        const refreshToken = generateRefreshToken(newUser._id);
+        const newUser = new User({
+            fullName,
+            email,
+            password: hashedPassword,
+            wallet: wallet?._id,
+            verificationToken
+        })        
 
-        await sendEmail(email, "Verify your account", 
-            templates.verification(newUser.fullName, verificationToken));
+        // calling the function for generating the verification token
+        const verificationToken = generateVerificationToken(newUser._id)
+        await newUser.save();
+
+        await sendEmail(email, "Verify your account",
+            `Click here to verify your account: ${process.env.EMAIL}/verify/${verificationToken}`
+        );
 
         res.status(201).json({
             message: "User and wallet created successfully",
@@ -58,12 +55,32 @@ const registerUser = async (req, res) => {
                 id: newWallet._id,
                 balance: newWallet.balance
             },
-            accessToken,
-            refreshToken
+            verificationToken
         })
     
+    // }catch(error){
+    //     res.status(500).json({message: "Internal server error"});
+    // }
+}
+
+const verifyEmail = async (req, res) => {
+    const {token} = req.params;
+
+    try{
+        const {email} = verifyToken(token, process.env.VERIFICATION_TOKEN);
+
+        const user = await User.findOne({email});
+        if(!user){
+            return res.status(401).json({message: 'User not found.'});
+        }
+
+        user.isVerified = true;
+        user.verificationToken = null;
+        await user.save();
+
+        res.status(200).json({message: 'Email verified successfully'});
     }catch(error){
-        res.status(500).json({message: "Internal server error"});
+        res.status(400).json({message: 'Invalid or expired token.'});
     }
 }
 
@@ -83,6 +100,10 @@ const loginUser = async (req, res) => {
             return res.status(400).json({ message: 'Email or Password is incorrect!' });
         }
 
+        if(!user.isVerified){
+            return res.status(401).json({message: 'Please verify your email.'}) 
+        }
+
         // Generate JWT token
         const accessToken = generateAccessToken(user?._id);
         const refreshToken = generateRefreshToken(user?._id);
@@ -90,13 +111,7 @@ const loginUser = async (req, res) => {
         user.refreshToken = refreshToken;
         await user.save();
 
-        await sendEmail(email, "Login Notification",
-            templates.loginNotification(accessToken, refreshToken));
-        
-        // Return response
-        if(!user.isVerified){
-            return res.status(403).json({ message: 'Please verify your account first!' });
-        }
+        await sendEmail(email, "Login Notification");
 
         res.status(200).json({
             message: "Login successful",
@@ -115,71 +130,65 @@ const loginUser = async (req, res) => {
     }
 }
 
-const verifyEmail = async (req, res) => {
-    const { token } = req.params;
+const forgotPassword = async (req, res) => {
+    const { email } = req.body;
 
-    try {
-        const user = await User.findOne({ verificationToken: token });
+    try{
+        // Check if user exists
+        const user = await User.findOne({ email });
         if(!user){
-            return res.status(400).json({ message: 'Invalid verification token' });
+            return res.status(400).json({ message: 'Email not found!' });
         }
 
-        user.isVerified = true;
-        user.verificationToken = undefined;
-        await user.save();
+        // Generate reset token
+        const resetToken = generateResetToken(user?._id);
+        user.resetToken = resetToken
+        user.resetTokenExpiry = Date.now() + 15 * 60 * 1000
+        await user.save()    
 
-        res.status(200).json({ message: 'Email verified successfully' });
+        await sendEmail(email, "Reset Password", `Please use this link to reset your password: ${process.env.RESET_TOKEN}/reset-password/${resetToken}`);
+        
+        res.status(200).json({ message: 'Reset password email sent!' });
     }catch(error){
-        res.status(500).json({message: "Internal server error"});
+        res.status(500).json({error})
     }
 }
 
-const refreshToken = async (req, res) => {
-    const { refreshToken } = req.body;
+const resetPassword = async (req, res) => {
+    const {token} = req.params;
+    const {password} = req.body
+        try {
+            // Check if user exists
+            const id = jwt.verify(token, process.env.ACCESS_TOKEN)
+            const user = await User.findById(id);
+            if(!user){
+                return res.status(400).json({ message: 'Email not found!' });
+            }
+            if(!password.length < 12){
+                return res.status(400).json({ message: 'Password must be at least 12 characters long!' });
+            }
+    
+            //Hash password
+            const hashedPassword = await bcrypt.hash(password, 12);
+            user.password = hashedPassword;
 
-    if(!refreshToken){
-        return res.status(401).json({ message: 'Refresh token is required' });
-    }
-
-    try {
-        const user = await User.findOne({ refreshToken });
-        if(!user){
-            return res.status(403).json({ message: 'Invalid refresh token' });
+            user.resetToken = null; // Clear reset token
+            user.resetTokenExpiry = null; //this is to clear the expiry time of the reset token
+            await user.save();
+        
+            // Respond to client
+            res.status(200).json({ message: 'Password reset successfully!' });
+        }catch(error){
+            res.status(500).json({error})
         }
-
-        const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN);
-        const userId = decoded.id;
-
-        // Generate new access token
-        const accessToken = generateAccessToken(userId);
-        // Generate new refresh token
-        const newRefreshToken = generateRefreshToken(userId);
-
-        user.refreshToken = newRefreshToken;
-        await user.save();
-        await sendEmail(user.email, "Token Refresh Notification",
-            templates.tokenRefreshNotification(accessToken, newRefreshToken));
-
-
-        res.status(200).json({ accessToken });
-    }catch(error){
-        res.status(500).json({message: "Internal server error"});
     }
-}
 
-// const handleGetAllUser = async (req, res) => {
-//     const allUsers = await User.find();
 
-//     res.status(200).json({
-//         message: "All users found",
-//         allUsers
-//     })
-// }
 
 module.exports = {
     registerUser, 
     loginUser,
     verifyEmail,
-    refreshToken
-    // handleGetAllUser
+    forgotPassword,
+    resetPassword
 }

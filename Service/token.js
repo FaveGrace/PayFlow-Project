@@ -12,7 +12,23 @@ const generateRefreshToken = (userId) => {
         { expiresIn: "30d" });
 }
 
+const generateVerificationToken = (userId) => {
+    return jwt.sign({id: userId},
+        process.env.VERIFICATION_TOKEN,
+        {expiresIn: '1d'}
+    )
+}
+
+const generateResetToken = (userId) => {
+    return jwt.sign({id: userId},
+        process.env.RESET_TOKEN,
+        {expiresIn: '15m'}
+    )
+}
+
 module.exports = {
     generateAccessToken,
-    generateRefreshToken
+    generateRefreshToken,
+    generateVerificationToken,
+    generateResetToken
 };

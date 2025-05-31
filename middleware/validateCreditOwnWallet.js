@@ -14,4 +14,4 @@ const validateCreditOwnWallet = (req, res, next) => {
   next();
 };
 
-module.exports = {validateCreditOwnWallet}
+module.exports = validateCreditOwnWallet;

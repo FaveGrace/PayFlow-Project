@@ -6,7 +6,7 @@ const Transaction = require("../Models/transactionSchema");
 
 
 const transfer = async (req, res) => {
-    const { receiverId, amount, description } = req.body;
+    const { receiverId, amount } = req.body;
     const senderId = req.user.id; // Assuming senderId is obtained from the authenticated user
 
     try {
@@ -16,12 +16,6 @@ const transfer = async (req, res) => {
         if(!sender || !receiver){
             return res.status(400).json({ message: 'Sender or receiver not found!' });
         }
-            // const senderWallet = await Wallet.findOne({ user: senderId });
-            // const receiverWallet = await Wallet.findOne({ user: receiverId });
-
-            // if(!senderWallet || !receiverWallet){
-            //     return res.status(400).json({ message: 'Sender or receiver not found!' });
-            // }
 
         // Check balance
         if(sender.wallet.balance < amount){
@@ -32,8 +26,8 @@ const transfer = async (req, res) => {
         sender.wallet.balance -= amount;
         receiver.wallet.balance += amount;
 
-        await senderWallet.save();
-        await receiverWallet.save();
+        await sender.save();
+        await receiver.save();
 
         //Save transaction
         const debitTransaction = new Transaction({
@@ -62,8 +56,8 @@ const transfer = async (req, res) => {
         const receiverMail = `Hi ${receiver.name}, you have received ${amount} from ${sender.name}. 
         Your new balance is ${receiver.wallet.balance}.`
 
-        await sendEmail(sender.email, 'Transfer Successful - PayFlow', senderMail, sendEmail.templates.transferNotification);
-        await sendEmail(receiver.email, 'Transfer Successful - PayFlow', receiverMail, sendEmail.templates.transferNotification);
+        await sendEmail(sender.email, 'Transfer Successful - PayFlow', senderMail);
+        await sendEmail(receiver.email, 'Transfer Successful - PayFlow', receiverMail);
 
         res.status(200).json({
             message: 'Transfer successful!',
@@ -75,53 +69,7 @@ const transfer = async (req, res) => {
     }
 }
 
-const creditOwnWallet = async (req, res) => {
-    const { userId, amount } = req.body;
-
-    try {
-        const user = await User.findById(userId);
-        if(!user){
-            return res.status(400).json({ message: 'User not found!' });
-        }
-
-        // Check if user exists
-        const wallet = await Wallet.findOne({ user: userId });
-        if(!wallet){
-            return res.status(400).json({ message: 'Wallet not found!' });
-        }
-
-        // credit wallet
-        wallet.balance += amount;
-        await wallet.save();
-
-        // Save transaction
-        const transaction = new Transaction({
-            sender: userId,
-            receiver: userId,
-            amount: amount,
-            type: 'credit',
-            description: `Credited ${amount} to own wallet`,
-            timestamp: new Date()
-        });
-
-        await transaction.save();
-
-        //send notification email to sender and recipient
-        const mailNotification = `Hi ${user.email}, your wallet has been credited with ${amount}.
-        Your new balance is ${wallet.balance}.`
-
-        await sendEmail(user.email, 'Wallet Credited - PayFlow', creditOwnWallet);
-
-        res.status(200).json({
-            message: 'Wallet credited successfully!',
-            wallet
-        });
-    }catch(error){
-        res.status(500).json({error})
-    }
-}
-
-const transactionHistory = async (req, res) => {
+const transactionHistoryById = async (req, res) => {
     const userId = req.user.id;
 
     try {
@@ -132,6 +80,8 @@ const transactionHistory = async (req, res) => {
                 { receiver: userId }
             ]
         }).sort({ timestamp: -1 });
+
+        await sendEmail(email, 'Transaction History')
 
         res.status(200).json({
             message: 'Transaction history retrieved successfully!',
@@ -144,6 +94,5 @@ const transactionHistory = async (req, res) => {
 
 module.exports = {
     transfer,
-    creditOwnWallet,
-    transactionHistory
+    transactionHistoryById
 }

@@ -1,20 +1,14 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const { registerUser, loginUser, handleGetAllUser } = require('./Controllers/authController');
-const { forgotPassword, resetPassword } = require('./Controllers/userController');
-const { transfer, creditOwnWallet, transactionHistory } = require('./Controllers/transactionController');
-const { validateLoginDetails } = require('./middleware/validateLoginDetails');
-const { validateLogin } = require('./middleware/validateLogin');
-const { validateCreditOwnWallet } = require('./middleware/validateCreditOwnWallet');
-const { validateTransactionHistory } = require('./middleware/validateTransactionHistory');
-const { validateTransfer } = require('./middleware/validateTransfer');
-const { auth } = require('./middleware/authMiddleware');
+const cors = require('cors');
+const routes = require('./Routes')
 dotenv.config();
 
 const app = express();
 
 app.use(express.json());
+app.use(cors());
 
 const PORT = process.env.PORT || 7080;
 
@@ -26,6 +20,8 @@ mongoose.connect(process.env.MONGODB_URL)
         console.log(`Server is running on port ${PORT}`);
     });
 })
+
+app.use(routes);
 
 /*
 Fintech Digital Wallet System (PayFlow)
@@ -56,24 +52,10 @@ Milestone 2: Money Transfers
 1.Add money transfer logic between wallets.
 2.Create Transaction schema to log each transfer.
 3.Validate balances before transfers.
+
+Milestone 3: Wallet & Transaction History
+GET endpoint for viewing wallet balance.
+GET endpoint to list past transactions.
+Ensure authentication middleware is applied.
 */
 
-app.post('/auth/register', validateLoginDetails, registerUser)
-
-app.post('/auth/login', validateLogin, loginUser)
-
-app.post("/forgot-password", forgotPassword)
-
-app.patch("/reset-password", auth, resetPassword)
-
-//Money transfer
-app.post("/transfer", validateTransfer, transfer)
-
-//Crediting own wallet
-app.post("/wallet/credit-own-wallet", validateCreditOwnWallet, creditOwnWallet)
-
-//Transaction history endpoint
-app.get("/transaction-history/:id", validateTransactionHistory, transactionHistory)
-
-//Get all users by admin if needed
-//app.get("/get-all-users", auth, handleGetAllUser)
