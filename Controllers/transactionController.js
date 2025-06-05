@@ -2,14 +2,20 @@ const sendEmail = require("../Service/notifications");
 const User = require("../Models/userSchema");
 const Wallet = require("../Models/walletSchema");
 const Transaction = require("../Models/transactionSchema"); 
+const transferMail = require("../Service/notifications").transferMail;
 
 
 
 const transfer = async (req, res) => {
-    const { receiverId, amount } = req.body;
+    const { receiverEmail, amount } = req.body;
     const senderId = req.user.id; // Assuming senderId is obtained from the authenticated user
 
-    try {
+    //try {
+
+        // Validate input
+        if(!receiverEmail || !amount || amount <= 0){
+            return res.status(400).json({ message: 'Invalid input!' });
+        }
         // Check if sender and receiver exist
         const sender = await User.findById(senderId).populate('wallet');
         const receiver = await User.findOne({ email: receiverEmail }).populate('wallet');
@@ -26,24 +32,26 @@ const transfer = async (req, res) => {
         sender.wallet.balance -= amount;
         receiver.wallet.balance += amount;
 
-        await sender.save();
-        await receiver.save();
+        await sender.wallet.save();
+        await receiver.wallet.save();
 
         //Save transaction
         const debitTransaction = new Transaction({
             sender: sender._id,
             receiver: receiver._id,
             amount,
+            balance: sender.wallet.balance,
             type: 'debit',
-            description: `Sent ${amount} to ${receiverId}`,
+            description: `Sent ${amount} to ${receiver.email}`,
             timestamp: new Date()
         });
         const creditTransaction = new Transaction({
             sender: sender._id,
             receiver: receiver._id,
             amount,
+            balance: receiver.wallet.balance,
             type: 'credit',
-            description: `Received ${amount} from ${senderId}`,
+            description: `Received ${amount} from ${sender.email}`,
             timestamp: new Date()
         });
 
@@ -51,22 +59,17 @@ const transfer = async (req, res) => {
         await creditTransaction.save();
 
         //send notification email to sender and recipient
-        const senderMail = `Hi ${sender.name}, ${amount} has been successfully sent
-        to ${receiver.name}. Your new balance is ${sender.wallet.balance}.`
-        const receiverMail = `Hi ${receiver.name}, you have received ${amount} from ${sender.name}. 
-        Your new balance is ${receiver.wallet.balance}.`
-
-        await sendEmail(sender.email, 'Transfer Successful - PayFlow', senderMail);
-        await sendEmail(receiver.email, 'Transfer Successful - PayFlow', receiverMail);
+        await transferMail(receiver.email, amount, sender, receiver);
+        await transferMail(sender.email, amount, sender, receiver);
 
         res.status(200).json({
             message: 'Transfer successful!',
             debitTransaction,
             creditTransaction
         });
-    }catch(error){
-        res.status(500).json({error})
-    }
+    // }catch(error){
+    //     res.status(500).json({error})
+    // }
 }
 
 const transactionHistoryById = async (req, res) => {

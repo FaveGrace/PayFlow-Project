@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const {generateAccessToken, generateRefreshToken, generateVerificationToken} = require('../Service/token');
-const { sendEmail} = require('../Service/notifications');
+const {generateAccessToken, generateRefreshToken, generateVerificationToken, generateResetToken} = require('../Service/token');
+const {verificationMail, loginMail, resetPasswordMail} = require('../Service/notifications');
 const User = require("../Models/userSchema");
 const Wallet = require("../Models/walletSchema");
 
@@ -19,28 +19,31 @@ const registerUser = async (req, res) => {
         //Hash password
         const hashedPassword = await bcrypt.hash(password, 12);
 
+        const newUser = new User({
+            fullName,
+            email,
+            password: hashedPassword
+        })    
+        
+        // calling the function for generating the verification token
+        const verificationToken = generateVerificationToken(newUser._id);
+        newUser.verificationToken = verificationToken;
+
+        const accessToken = generateAccessToken(newUser._id);
+        const refreshToken = generateRefreshToken(newUser._id);
+        
+        await newUser.save();
+
         const newWallet = new Wallet({
             user: newUser._id,
             balance: 0
         })
-
         await newWallet.save()
 
-        const newUser = new User({
-            fullName,
-            email,
-            password: hashedPassword,
-            wallet: wallet?._id,
-            verificationToken
-        })        
-
-        // calling the function for generating the verification token
-        const verificationToken = generateVerificationToken(newUser._id)
+        newUser.wallet = newWallet._id;
         await newUser.save();
 
-        await sendEmail(email, "Verify your account",
-            `Click here to verify your account: ${process.env.EMAIL}/verify/${verificationToken}`
-        );
+        await verificationMail(email, verificationToken);
 
         res.status(201).json({
             message: "User and wallet created successfully",
@@ -48,14 +51,15 @@ const registerUser = async (req, res) => {
                 id: newUser._id,
                 fullName: newUser.fullName,
                 email: newUser.email,
-                isVerified: newUser.isVerified,
-                verificationToken: newUser.verificationToken
-            },
+                isVerified: newUser.isVerified
+                },
             newWallet: {
                 id: newWallet._id,
                 balance: newWallet.balance
             },
-            verificationToken
+            verificationToken,
+            accessToken,
+            refreshToken
         })
     
     // }catch(error){
@@ -64,23 +68,27 @@ const registerUser = async (req, res) => {
 }
 
 const verifyEmail = async (req, res) => {
-    const {token} = req.params;
+    const { token } = req.params;
+    try {
+        // Verify the token
+        const decoded = jwt.verify(token, process.env.VERIFICATION_TOKEN);
 
-    try{
-        const {email} = verifyToken(token, process.env.VERIFICATION_TOKEN);
+        const userId = decoded.id;
 
-        const user = await User.findOne({email});
+        // Find the user by ID
+        const user = await User.findById(userId);
         if(!user){
-            return res.status(401).json({message: 'User not found.'});
+            return res.status(400).json({ message: 'Invalid token or user not found' });
         }
 
         user.isVerified = true;
-        user.verificationToken = null;
+        user.verificationToken = null; // Clear the verification token after successful verification
         await user.save();
 
-        res.status(200).json({message: 'Email verified successfully'});
+        res.status(200).json({ message: 'Email verified successfully' });
+
     }catch(error){
-        res.status(400).json({message: 'Invalid or expired token.'});
+        res.status(500).json({message: "Internal server error"});
     }
 }
 
@@ -111,7 +119,7 @@ const loginUser = async (req, res) => {
         user.refreshToken = refreshToken;
         await user.save();
 
-        await sendEmail(email, "Login Notification");
+        await loginMail(email, refreshToken);
 
         res.status(200).json({
             message: "Login successful",
@@ -141,16 +149,20 @@ const forgotPassword = async (req, res) => {
         }
 
         // Generate reset token
-        const resetToken = generateResetToken(user?._id);
+        const resetToken = generateResetToken(user._id);
+        // Save reset token and expiry time to user
         user.resetToken = resetToken
         user.resetTokenExpiry = Date.now() + 15 * 60 * 1000
         await user.save()    
 
-        await sendEmail(email, "Reset Password", `Please use this link to reset your password: ${process.env.RESET_TOKEN}/reset-password/${resetToken}`);
-        
-        res.status(200).json({ message: 'Reset password email sent!' });
+        await resetPasswordMail(email, resetToken);
+
+        res.status(200).json({ message: 'Reset password email sent!',
+            resetToken
+         });
     }catch(error){
-        res.status(500).json({error})
+        console.error(error);
+        res.status(500).json({message: 'Internal server error'});
     }
 }
 
@@ -159,12 +171,12 @@ const resetPassword = async (req, res) => {
     const {password} = req.body
         try {
             // Check if user exists
-            const id = jwt.verify(token, process.env.ACCESS_TOKEN)
-            const user = await User.findById(id);
+            const decoded = jwt.verify(token, process.env.RESET_TOKEN)
+            const user = await User.findById(decoded.id);
             if(!user){
                 return res.status(400).json({ message: 'Email not found!' });
             }
-            if(!password.length < 12){
+            if(password.length < 12){
                 return res.status(400).json({ message: 'Password must be at least 12 characters long!' });
             }
     
@@ -183,6 +195,21 @@ const resetPassword = async (req, res) => {
         }
     }
 
+    const getAllUser = async (req, res) => {
+        try{    
+        const users = await User.find()
+
+
+            res.status(200).json(
+                {message: "All users found",
+                users}
+            )
+        }catch(error){
+            console.error(error);
+            res.status(400).json({message: "system error"})
+        }
+    }
+
 
 
 module.exports = {
@@ -190,5 +217,6 @@ module.exports = {
     loginUser,
     verifyEmail,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    getAllUser
 }
