@@ -7,7 +7,7 @@ const { auth } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 //Transaction Routes
-router.post("/transfer", auth, validateTransfer, transfer);
-router.get("/get-transaction/:id", validateTransactionHistory, transactionHistoryById);
+router.post("/wallet/transfer", auth, validateTransfer, transfer);
+router.get("/get-transaction", auth, validateTransactionHistory, transactionHistoryById);
 
 module.exports = router;

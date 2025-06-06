@@ -9,7 +9,7 @@ const Wallet = require("../Models/walletSchema");
 const registerUser = async (req, res) => {
     const { fullName, email, password } = req.body;
 
-    //try {
+    try {
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if(existingUser){
@@ -62,9 +62,9 @@ const registerUser = async (req, res) => {
             refreshToken
         })
     
-    // }catch(error){
-    //     res.status(500).json({message: "Internal server error"});
-    // }
+    }catch(error){
+        res.status(500).json({message: "Internal server error"});
+    }
 }
 
 const verifyEmail = async (req, res) => {
@@ -113,11 +113,19 @@ const loginUser = async (req, res) => {
         }
 
         // Generate JWT token
-        const accessToken = generateAccessToken(user?._id);
-        const refreshToken = generateRefreshToken(user?._id);
+        const accessToken = generateAccessToken(user._id);
+        const refreshToken = generateRefreshToken(user._id);
 
         user.refreshToken = refreshToken;
         await user.save();
+
+        //set refresh token as httpOnly cookie
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+            sameSite: 'strict', // Helps prevent CSRF attacks
+            maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+        });
 
         await loginMail(email, refreshToken);
 
@@ -128,13 +136,81 @@ const loginUser = async (req, res) => {
                 fullName: user.fullName,
                 email: user.email
             },
-            wallet: await Wallet.findOne({ user: user._id }).select('balance'),
-            accessToken,
-            refreshToken
+            wallet: { 
+                id: wallet._id,
+                balance: wallet.balance || 0
+            },
+            accessToken
         })
 
     }catch(error){
+        console.error('Login error:', error);
         res.status(500).json({message: "Internal server error"});
+    }
+}
+
+const refreshToken = async (req, res) => {
+    const { refreshToken } = req.cookies;
+
+    if(!refreshToken){
+        return res.status(401).json({ message: 'No refresh token provided' });
+    }
+
+    try {
+        // Verify the refresh token
+        const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN);
+        const user = await User.findById(decoded.id);
+
+        if(!user || user.refreshToken !== refreshToken){
+            return res.status(403).json({ message: 'Invalid refresh token' });
+        }
+
+        // Generate new access token
+        const newAccessToken = generateAccessToken(user._id);
+        const newRefreshToken = generateRefreshToken(user._id);
+
+        user.refreshToken = newRefreshToken;
+        await user.save();
+
+        res.cookie('refreshToken', newRefreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+            sameSite: 'strict', // Helps prevent CSRF attacks
+            maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+        });
+
+        res.status(200).json({
+            message: 'Access token refreshed successfully',
+            accessToken: newAccessToken
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+}
+
+const logoutUser = async (req, res) => {
+    const { refreshToken } = req.cookies;
+
+try{
+    if(refreshToken){
+        // Verify the refresh token
+        const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN);
+        const user = await User.findById(decoded.id);
+
+        if(user){
+            user.refreshToken = null;
+        await user.save();
+        }
+    }       
+    
+    // Clear the refresh token   
+    res.clearCookie('refreshToken'); // Clear the cookie
+
+    res.status(200).json({ message: 'Logged out successfully' });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Internal server error' });
     }
 }
 
@@ -218,5 +294,7 @@ module.exports = {
     verifyEmail,
     forgotPassword,
     resetPassword,
-    getAllUser
+    getAllUser,
+    refreshToken,
+    logoutUser
 }

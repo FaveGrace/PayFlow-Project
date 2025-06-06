@@ -10,37 +10,54 @@ const transfer = async (req, res) => {
     const { receiverEmail, amount } = req.body;
     const senderId = req.user.id; // Assuming senderId is obtained from the authenticated user
 
-    //try {
+    try {
 
         // Validate input
         if(!receiverEmail || !amount || amount <= 0){
             return res.status(400).json({ message: 'Invalid input!' });
         }
+
+        const transferAmount = parseFloat(amount);
+
         // Check if sender and receiver exist
-        const sender = await User.findById(senderId).populate('wallet');
-        const receiver = await User.findOne({ email: receiverEmail }).populate('wallet');
+        const sender = await User.findById(senderId);
+        const receiver = await User.findOne({ email: receiverEmail });
+
         if(!sender || !receiver){
             return res.status(400).json({ message: 'Sender or receiver not found!' });
         }
 
+        //for better control, find wallets separately
+        const senderWallet = await Wallet.findOne({user: senderId});
+        const receiverWallet = await Wallet.findOne({user: receiver._id});
+
+        if(!senderWallet || !receiverWallet){
+            return res.status(400).json({message: 'Wallet not found for sender nor receiver.'});
+        }
+
         // Check balance
-        if(sender.wallet.balance < amount){
-            return res.status(400).json({ message: 'Insufficient balance!' });
+        const senderBalance = senderWallet.balance || 0;
+        if(senderBalance < transferAmount){
+            return res.status(400).json({ 
+                message: 'Insufficient balance!',
+                currentBalance: senderBalance,
+                requiredAmount: transferAmount 
+            });
         }
 
         // Update balances
-        sender.wallet.balance -= amount;
-        receiver.wallet.balance += amount;
+        senderWallet.balance = senderBalance - transferAmount;
+        receiverWallet.balance = (receiverWallet.balance || 0) + transferAmount;
 
-        await sender.wallet.save();
-        await receiver.wallet.save();
+        await senderWallet.save();
+        await receiverWallet.save();
 
         //Save transaction
         const debitTransaction = new Transaction({
             sender: sender._id,
             receiver: receiver._id,
-            amount,
-            balance: sender.wallet.balance,
+            amount: transferAmount,
+            balance: senderWallet.balance,
             type: 'debit',
             description: `Sent ${amount} to ${receiver.email}`,
             timestamp: new Date()
@@ -48,8 +65,8 @@ const transfer = async (req, res) => {
         const creditTransaction = new Transaction({
             sender: sender._id,
             receiver: receiver._id,
-            amount,
-            balance: receiver.wallet.balance,
+            amount: transferAmount,
+            balance: receiverWallet.balance,
             type: 'credit',
             description: `Received ${amount} from ${sender.email}`,
             timestamp: new Date()
@@ -64,12 +81,15 @@ const transfer = async (req, res) => {
 
         res.status(200).json({
             message: 'Transfer successful!',
+            senderNewBalance: senderWallet.balance,
+            receiverNewBalance: receiverWallet.balance,
             debitTransaction,
             creditTransaction
         });
-    // }catch(error){
-    //     res.status(500).json({error})
-    // }
+    }catch(error){
+        console.error('Transfer error:', error);
+        res.status(500).json({message: 'Internal server error'})
+    }
 }
 
 const transactionHistoryById = async (req, res) => {
@@ -82,16 +102,19 @@ const transactionHistoryById = async (req, res) => {
                 { sender: userId },
                 { receiver: userId }
             ]
-        }).sort({ timestamp: -1 });
-
-        await sendEmail(email, 'Transaction History')
+        }).sort({ timestamp: -1 })
+        .populate('sender', 'fullName email')
+        .populate('receiver', 'fullName email')
+        .sort({createdAt: -1});        
 
         res.status(200).json({
             message: 'Transaction history retrieved successfully!',
+            count: transactions.length,
             transactions
         });
     }catch(error){
-        res.status(500).json({error})
+        console.error('Transaction history error:', error);
+        res.status(500).json({message: 'Internal server error'})
     }
 }
 
