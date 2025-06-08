@@ -23,7 +23,7 @@ mongoose.connect(process.env.MONGODB_URL)
     });
 })
 
-app.use(routes);
+app.use("/api", routes);
 
 /*
 Fintech Digital Wallet System (PayFlow)
