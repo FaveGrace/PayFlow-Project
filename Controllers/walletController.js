@@ -1,10 +1,10 @@
 const Wallet = require("../Models/walletSchema");
 const Transaction = require("../Models/transactionSchema")
-const creditWalletMail = require("../Service/notifications");
+const {creditWalletMail} = require("../Service/notifications");
 
 const handleWalletBalance = async (req, res) => {
     try{
-        const userId = req.user._id;
+        const userId = req.user.id;
         const wallet = await Wallet.findOne({ user: userId });
 
         if(!wallet){
@@ -13,7 +13,7 @@ const handleWalletBalance = async (req, res) => {
 
         res.status(200).json({
             message: 'Here is your wallet balance.', 
-            balance: wallet.balance,
+            balance: wallet.balance || 0,
             wallet: {
                 id: wallet._id,
                 balance: wallet.balance,
@@ -43,7 +43,7 @@ const creditOwnWallet = async (req, res) => {
         }
 
         // credit wallet
-        wallet.balance += (wallet.balance || 0) + parseFloat(amount);//handles null balance
+        wallet.balance = (wallet.balance || 0) + parseFloat(amount);//handles null balance
         await wallet.save();
 
         // Save transaction
@@ -52,7 +52,7 @@ const creditOwnWallet = async (req, res) => {
             receiver: sender.id, // Since it's own wallet, receiver is the same as sender
             amount: parseFloat(amount),
             type: 'credit',
-            balance: wallet.balance,
+            balance: wallet.balance || 0, // Ensure balance is not null
             description: `Credited ${amount} to own wallet`,
             timestamp: new Date()
         });
@@ -65,7 +65,7 @@ const creditOwnWallet = async (req, res) => {
         res.status(200).json({
             message: 'Wallet credited successfully!',
             amount: parseFloat(amount),
-            newBalance: wallet.balance,
+            newBalance: wallet.balance || 0, // Ensure balance is not null
             wallet: {
                 id: wallet._id,
                 balance: wallet.balance,

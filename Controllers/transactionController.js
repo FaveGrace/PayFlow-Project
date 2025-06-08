@@ -45,7 +45,8 @@ const transfer = async (req, res) => {
             });
         }
 
-        // Update balances
+        // Perform transfer
+        // Update sender and receiver wallets
         senderWallet.balance = senderBalance - transferAmount;
         receiverWallet.balance = (receiverWallet.balance || 0) + transferAmount;
 
@@ -57,7 +58,7 @@ const transfer = async (req, res) => {
             sender: sender._id,
             receiver: receiver._id,
             amount: transferAmount,
-            balance: senderWallet.balance,
+            balance: senderWallet.balance || 0, // Ensure balance is not null
             type: 'debit',
             description: `Sent ${amount} to ${receiver.email}`,
             timestamp: new Date()
@@ -66,7 +67,7 @@ const transfer = async (req, res) => {
             sender: sender._id,
             receiver: receiver._id,
             amount: transferAmount,
-            balance: receiverWallet.balance,
+            balance: receiverWallet.balance || 0, // Ensure balance is not null
             type: 'credit',
             description: `Received ${amount} from ${sender.email}`,
             timestamp: new Date()
@@ -81,8 +82,8 @@ const transfer = async (req, res) => {
 
         res.status(200).json({
             message: 'Transfer successful!',
-            senderNewBalance: senderWallet.balance,
-            receiverNewBalance: receiverWallet.balance,
+            senderNewBalance: senderWallet.balance || 0,
+            receiverNewBalance: receiverWallet.balance || 0,
             debitTransaction,
             creditTransaction
         });
@@ -92,7 +93,7 @@ const transfer = async (req, res) => {
     }
 }
 
-const transactionHistoryById = async (req, res) => {
+const transactionHistory = async (req, res) => {
     const userId = req.user.id;
 
     try {
@@ -102,7 +103,7 @@ const transactionHistoryById = async (req, res) => {
                 { sender: userId },
                 { receiver: userId }
             ]
-        }).sort({ timestamp: -1 })
+        })
         .populate('sender', 'fullName email')
         .populate('receiver', 'fullName email')
         .sort({createdAt: -1});        
@@ -118,7 +119,42 @@ const transactionHistoryById = async (req, res) => {
     }
 }
 
+//get transactions of a specific user
+const transactionById = async (req, res) => {
+    const { transactionId } = req.params;
+    if(!transactionId){
+        return res.status(400).json({ message: 'Transaction ID is required!' });
+    }
+    const userId = req.user.id;
+
+    try {
+        // Get transaction by ID
+        const transaction = await Transaction.findOne({
+            _id: transactionId,
+            $or: [
+                { sender: userId },
+                { receiver: userId }
+            ]
+        })
+        .populate('sender', 'fullName email')
+        .populate('receiver', 'fullName email');
+
+        if(!transaction){
+            return res.status(404).json({ message: 'Transaction not found!' });
+        }
+
+        res.status(200).json({
+            message: 'Transaction retrieved successfully!',
+            transaction
+        });
+    }catch(error){
+        console.error('Transaction by ID error:', error);
+        res.status(500).json({message: 'Internal server error'})
+    }
+}
+
 module.exports = {
     transfer,
-    transactionHistoryById
+    transactionHistory,
+    transactionById
 }

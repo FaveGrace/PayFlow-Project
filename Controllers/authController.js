@@ -124,6 +124,7 @@ const loginUser = async (req, res) => {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
             sameSite: 'strict', // Helps prevent CSRF attacks
+            path: '/refresh-token', // Ensure the cookie is accessible on all routes
             maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
         });
 
@@ -137,8 +138,8 @@ const loginUser = async (req, res) => {
                 email: user.email
             },
             wallet: { 
-                id: wallet._id,
-                balance: wallet.balance || 0
+                id: Wallet._id,
+                balance: Wallet.balance || 0
             },
             accessToken
         })
