@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerUser, loginUser, forgotPassword, resetPassword, verifyEmail, getAllUser, refreshToken, logoutUser, userRole } = require('../Controllers/authController');
+const { registerUser, loginUser, forgotPassword, resetPassword, verifyEmail, getAllUser, refreshToken, logoutUser, welcomeUser } = require('../Controllers/authController');
 const { validateLoginDetails } = require('../middleware/validateLoginDetails');
 const { validateLogin } = require('../middleware/validateLogin');
 const { auth } = require('../middleware/authMiddleware');
@@ -16,6 +16,7 @@ router.get("/verify-email/:token", validateEmailVerification, verifyEmail);
 router.get("/get-users-only", auth, getAllUser);
 router.post("/refresh-token", refreshToken);
 router.post("/logout", logoutUser);
+router.get("/", welcomeUser)
 
 
 module.exports = router;
