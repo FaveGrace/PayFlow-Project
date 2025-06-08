@@ -51,7 +51,8 @@ const registerUser = async (req, res) => {
                 id: newUser._id,
                 fullName: newUser.fullName,
                 email: newUser.email,
-                isVerified: newUser.isVerified
+                isVerified: newUser.isVerified,
+                role: newUser.role
                 },
             newWallet: {
                 id: newWallet._id,
@@ -272,22 +273,21 @@ const resetPassword = async (req, res) => {
         }
     }
 
-    const getAllUser = async (req, res) => {
-        try{    
-        const users = await User.find()
+// const getAllUser = async (req, res) => {
+//     try{    
+//         const users = await User.find()
+//         .select('-password -verificationToken -resetToken -resetTokenExpiry -refreshToken') // Exclude sensitive fields
+//         .populate('wallet', 'balance'); // Populate wallet field with balance only
 
-
-            res.status(200).json(
-                {message: "All users found",
-                users}
-            )
-        }catch(error){
-            console.error(error);
-            res.status(400).json({message: "system error"})
-        }
-    }
-
-
+//         res.status(200).json(
+//             {message: "All users found",
+//             users}
+//         )
+//     }catch(error){
+//         console.error(error);
+//         res.status(400).json({message: "system error"})
+//     }
+// }
 
 module.exports = {
     registerUser, 
@@ -295,7 +295,7 @@ module.exports = {
     verifyEmail,
     forgotPassword,
     resetPassword,
-    getAllUser,
+    //getAllUser,
     refreshToken,
     logoutUser
 }
