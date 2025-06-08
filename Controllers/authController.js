@@ -96,7 +96,7 @@ const verifyEmail = async (req, res) => {
 const loginUser = async (req, res) => {
     const { email, password } = req.body;
 
-    try {
+    //try {
         // Check if user exists
         const user = await User.findOne({ email });
         if(!user){
@@ -145,10 +145,10 @@ const loginUser = async (req, res) => {
             accessToken
         })
 
-    }catch(error){
-        console.error('Login error:', error);
-        res.status(500).json({message: "Internal server error"});
-    }
+    // }catch(error){
+    //     console.error('Login error:', error);
+    //     res.status(500).json({message: "Internal server error"});
+    // }
 }
 
 const refreshToken = async (req, res) => {
